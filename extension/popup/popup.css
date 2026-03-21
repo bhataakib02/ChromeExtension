@@ -101,7 +101,8 @@ header {
 .score-ring circle.meter {
     stroke: url(#scoreGradient);
     stroke-dasharray: 283;
-    stroke-dashoffset: 70; /* Dynamic */
+    stroke-dashoffset: 70;
+    /* Dynamic */
     transition: stroke-dashoffset 1s ease-out;
 }
 
@@ -134,7 +135,10 @@ header {
     text-transform: uppercase;
 }
 
-.status-badge.productive { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.status-badge.productive {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
 
 /* Tracking Info */
 .tracking-info {
@@ -197,12 +201,19 @@ header {
     height: 20px;
 }
 
-.switch input { opacity: 0; width: 0; height: 0; }
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
 
 .slider {
     position: absolute;
     cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background-color: #334155;
     transition: .4s;
     border-radius: 34px;
@@ -211,15 +222,22 @@ header {
 .slider:before {
     position: absolute;
     content: "";
-    height: 14px; width: 14px;
-    left: 3px; bottom: 3px;
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
     background-color: white;
     transition: .4s;
     border-radius: 50%;
 }
 
-input:checked + .slider { background-color: var(--primary-color); }
-input:checked + .slider:before { transform: translateX(16px); }
+input:checked+.slider {
+    background-color: var(--primary-color);
+}
+
+input:checked+.slider:before {
+    transform: translateX(16px);
+}
 
 /* Buttons */
 .pill-btn {
@@ -234,7 +252,9 @@ input:checked + .slider:before { transform: translateX(16px); }
     transition: 0.2s;
 }
 
-.pill-btn:hover { transform: scale(1.05); }
+.pill-btn:hover {
+    transform: scale(1.05);
+}
 
 .timer-display {
     font-family: monospace;
@@ -260,4 +280,73 @@ input:checked + .slider:before { transform: translateX(16px); }
 .primary-btn:hover {
     box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
     transform: translateY(-2px);
+}
+
+/* Authentication UI Specifics */
+.auth-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.auth-tab {
+    flex: 1;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    padding: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: 0.3s;
+}
+
+.auth-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.input-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: 0.3s;
+}
+
+.input-group input:focus {
+    border-color: var(--primary-color);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.auth-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+    text-align: center;
+    min-height: 16px;
 }

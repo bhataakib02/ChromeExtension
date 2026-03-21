@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,15 +8,50 @@
     <link rel="stylesheet" href="popup.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body class="dark-theme">
-    <div class="container">
+    <!-- AUTHENTICATION VIEW -->
+    <div class="container" id="auth-view" style="display: none;">
+        <header style="justify-content: center; margin-bottom: 20px;">
+            <div class="logo">
+                <img src="../icons/icon48.png" alt="AERO">
+                <span>AERO LOGIN</span>
+            </div>
+        </header>
+
+        <div class="auth-tabs">
+            <button id="tabLogin" class="auth-tab active">Login</button>
+            <button id="tabRegister" class="auth-tab">Register</button>
+        </div>
+
+        <form id="authForm" class="auth-form">
+            <div id="nameFieldToggle" class="input-group" style="display: none;">
+                <label>Name</label>
+                <input type="text" id="authName" placeholder="Your Name">
+            </div>
+            <div class="input-group">
+                <label>Email</label>
+                <input type="email" id="authEmail" placeholder="you@example.com" required>
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" id="authPassword" placeholder="••••••••" required>
+            </div>
+            <div id="authError" class="auth-error"></div>
+            <button type="submit" id="authSubmitBtn" class="primary-btn">LOGIN</button>
+        </form>
+    </div>
+
+    <!-- MAIN DASHBOARD VIEW -->
+    <div class="container" id="main-view" style="display: none;">
         <!-- Header -->
         <header>
             <div class="logo">
                 <img src="../icons/icon48.png" alt="AERO">
                 <span>AERO</span>
             </div>
-            <button id="settingsBtn" class="icon-btn">⚙️</button>
+            <button id="logoutBtn" class="icon-btn" title="Logout">🚪</button>
+            <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
         </header>
 
         <!-- Productivity Score Card -->
@@ -71,4 +107,5 @@
     </div>
     <script src="popup.js"></script>
 </body>
+
 </html>

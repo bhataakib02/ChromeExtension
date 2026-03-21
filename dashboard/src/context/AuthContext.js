@@ -8,6 +8,44 @@ const AuthContext = createContext();
 
 export const API_URL = "http://localhost:5010/api";
 
+// Set up global axios interceptor for auto token refresh
+axios.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config;
+
+        // If error is 401 (Unauthorized) and we haven't retried yet and it's not the refresh endpoint
+        if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes("/auth/refresh")) {
+            originalRequest._retry = true;
+
+            try {
+                const refreshToken = localStorage.getItem("refreshToken");
+                if (!refreshToken) throw new Error("No refresh token");
+
+                // Get new token
+                const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+                const newAccessToken = res.data.accessToken;
+
+                // Update storage
+                localStorage.setItem("accessToken", newAccessToken);
+
+                // Update authorization header and retry original request
+                originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+                return axios(originalRequest);
+            } catch (refreshError) {
+                // If refresh fails, clear storage and redirect
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("refreshToken");
+                if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+                    window.location.href = "/login";
+                }
+                return Promise.reject(refreshError);
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);

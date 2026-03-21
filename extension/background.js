@@ -150,8 +150,11 @@ async function handleTabSwitch(url, title = "") {
                 idle_time_percentage: idleTimeMins / 60,
                 session_length_mins: (Date.now() - (lastSaveTime || startTime)) / 60000
             })
-        }).then(res => res.json()).then(data => {
-            if (data.burnout_risk === "High") {
+        }).then(res => {
+            if (res.ok) return res.json();
+            throw new Error(`AI Service returned ${res.status}`);
+        }).then(data => {
+            if (data && data.burnout_risk === "High") {
                 chrome.notifications.create("burnout-warning", {
                     type: "basic",
                     iconUrl: "icons/icon128.png",
@@ -160,7 +163,13 @@ async function handleTabSwitch(url, title = "") {
                     priority: 2,
                 });
             }
-        }).catch(e => console.error(e));
+        }).catch(e => {
+            if (e.message.includes("504") || e.message.includes("502")) {
+                console.warn("Cognitive check skipped: AI Service unavailable.");
+            } else {
+                console.warn("Cognitive check failed:", e);
+            }
+        });
     }
 
     // Persist state for recovery
@@ -216,6 +225,21 @@ async function syncBlocklist() {
     }
 }
 
+async function syncPreferences() {
+    try {
+        const res = await authenticatedFetch("/auth/me");
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.user && data.user.preferences) {
+                await chrome.storage.local.set({ preferences: data.user.preferences });
+                console.log("✅ Preferences synced:", data.user.preferences);
+            }
+        }
+    } catch (err) {
+        console.warn("Could not sync preferences");
+    }
+}
+
 // ==================== ALARMS & EVENTS ====================
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -246,6 +270,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         });
     } else if (alarm.name === "sync-blocklist") {
         syncBlocklist();
+        syncPreferences();
     } else if (alarm.name === "heartbeat") {
         heartbeat();
     }
@@ -277,46 +302,63 @@ chrome.windows.onRemoved.addListener(async () => {
     }
 });
 
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "pageLoaded") {
         // Classify the page content asynchronously
         authenticatedFetch("/ai/classify", {
             method: "POST",
             body: JSON.stringify({ url: request.url, title: request.title, content: request.content || "" })
-        }).then(res => res.json()).then(data => {
+        }).then(res => {
+            if (res.ok) return res.json();
+            throw new Error(`AI classify returned ${res.status}`);
+        }).then(data => {
             console.log("🧠 AI Classification:", data);
-        }).catch(err => console.error(err));
+        }).catch(err => {
+            if (err.message.includes("504") || err.message.includes("502")) {
+                console.warn("AI classify skipped: AI Service unavailable.");
+            } else {
+                console.warn("AI classify failed:", err);
+            }
+        });
     } else if (request.action === "engagementActivity") {
         console.log(`Engagement on ${request.url} -> Scrolls: ${request.scrolls}, Clicks: ${request.clicks}`);
     } else if (request.action === "syncAll") {
-        syncBlocklist().then(() => sendResponse({ success: true }));
+        Promise.all([syncBlocklist(), syncPreferences()])
+            .then(() => sendResponse({ success: true }))
+            .catch(err => {
+                console.error("syncAll failed", err);
+                sendResponse({ success: false, error: err.message });
+            });
         return true;
     } else if (request.action === "startDeepWork") {
-        const minutes = request.minutes || 25;
-        chrome.alarms.create("deepWork", { delayInMinutes: minutes });
+        chrome.storage.local.get(["preferences"], (data) => {
+            const prefs = data.preferences || {};
+            const minutes = request.minutes || prefs.deepWorkMinutes || 25;
+            chrome.alarms.create("deepWork", { delayInMinutes: minutes });
 
-        // Start session in backend
-        authenticatedFetch("/deepwork/start", {
-            method: "POST",
-            body: JSON.stringify({
-                type: "work",
-                durationMinutes: minutes,
-                website: activeTab || ""
-            })
-        }).then(async res => {
-            if (res.ok) {
-                const session = await res.json();
-                chrome.storage.local.set({
-                    deepWorkActive: true,
-                    deepWorkState: "work",
-                    deepWorkEndTime: Date.now() + minutes * 60000,
-                    deepWorkSessionId: session._id
-                });
-                console.log("✅ Deep Work session started in backend:", session._id);
-            } else {
-                console.warn(`⚠️ Backend failed to start deep work: ${res.status}`);
-            }
-        }).catch(err => console.error("Could not start deep work in backend:", err));
+            // Start session in backend
+            authenticatedFetch("/deepwork/start", {
+                method: "POST",
+                body: JSON.stringify({
+                    type: "work",
+                    durationMinutes: minutes,
+                    website: activeTab || ""
+                })
+            }).then(async res => {
+                if (res.ok) {
+                    const session = await res.json();
+                    chrome.storage.local.set({
+                        deepWorkActive: true,
+                        deepWorkState: "work",
+                        deepWorkEndTime: Date.now() + minutes * 60000,
+                        deepWorkSessionId: session._id
+                    });
+                    console.log("✅ Deep Work session started in backend:", session._id);
+                } else {
+                    console.warn(`⚠️ Backend failed to start deep work: ${res.status}`);
+                }
+            }).catch(err => console.error("Could not start deep work in backend:", err));
+        });
 
         sendResponse({ success: true });
         return false;
@@ -349,6 +391,7 @@ async function init() {
     }
 
     syncBlocklist();
+    syncPreferences();
 
     // Use Alarms for periodic sync (more reliable in V3)
     chrome.alarms.create("sync-blocklist", { periodInMinutes: 10 });

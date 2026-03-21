@@ -29,7 +29,7 @@ export default function FocusPage() {
             await checkUser(); // Refresh user data
             syncWithExtension();
         } catch (err) {
-            console.error(`Error updating focus preference ${key}`);
+            console.error(`Error updating focus preference ${key}:`, err);
         }
     };
 
@@ -49,7 +49,7 @@ export default function FocusPage() {
             // Keep full objects to have _id
             setSites(res.data);
         } catch (err) {
-            console.error("Error fetching blocklist");
+            console.error("Error fetching blocklist:", err);
         } finally {
             setLoading(false);
         }
@@ -59,14 +59,14 @@ export default function FocusPage() {
         if (newSite && !sites.find(s => s.website === newSite)) {
             try {
                 const token = localStorage.getItem("accessToken");
-                const res = await axios.post(`${API_URL}/focus/`, { site: newSite }, {
+                const res = await axios.post(`${API_URL}/focus/`, { website: newSite }, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setSites([...sites, res.data]);
                 setNewSite("");
                 syncWithExtension();
             } catch (err) {
-                console.error("Error adding site to blocklist");
+                console.error("Error adding site to blocklist:", err);
             }
         }
     };
@@ -80,21 +80,25 @@ export default function FocusPage() {
             setSites(sites.filter(s => s._id !== id));
             syncWithExtension();
         } catch (err) {
-            console.error("Error removing site from blocklist");
+            console.error("Error removing site from blocklist:", err);
         }
     };
 
     const syncWithExtension = () => {
-        const extensionId = "dfbcfgkpgbfbdjabippomkelpkboffen";
-        console.log(`📡 Syncing blocklist to extension: ${extensionId}`);
-        if (typeof window !== "undefined" && window.chrome && window.chrome.runtime) {
-            window.chrome.runtime.sendMessage(extensionId, { action: "syncAll" }, (response) => {
-                if (window.chrome.runtime.lastError) {
-                    console.warn("❌ Could not sync blocklist:", window.chrome.runtime.lastError.message);
-                } else {
-                    console.log("✅ Blocklist synced successfully");
-                }
-            });
+        try {
+            const extensionId = "dfbcfgkpgbfbdjabippomkelpkboffen";
+            console.log(`📡 Syncing blocklist to extension: ${extensionId}`);
+            if (typeof window !== "undefined" && window.chrome && window.chrome.runtime && window.chrome.runtime.sendMessage) {
+                window.chrome.runtime.sendMessage(extensionId, { action: "syncAll" }, (response) => {
+                    if (window.chrome.runtime.lastError) {
+                        console.warn("❌ Could not sync blocklist:", window.chrome.runtime.lastError.message);
+                    } else {
+                        console.log("✅ Blocklist synced successfully");
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn("Extension sync failed or skipped:", error);
         }
     };
 
