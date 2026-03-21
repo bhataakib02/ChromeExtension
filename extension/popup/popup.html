@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AERO Productivity</title>
+    <link rel="stylesheet" href="popup.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <img src="../icons/icon48.png" alt="AERO">
+                <span>AERO</span>
+            </div>
+            <button id="settingsBtn" class="icon-btn">⚙️</button>
+        </header>
+
+        <!-- Productivity Score Card -->
+        <section class="score-card">
+            <div class="score-ring">
+                <svg viewBox="0 0 100 100">
+                    <circle class="bg" cx="50" cy="50" r="45"></circle>
+                    <circle class="meter" cx="50" cy="50" r="45"></circle>
+                </svg>
+                <div class="score-text">
+                    <span id="scoreValue">85</span>
+                    <small>SCORE</small>
+                </div>
+            </div>
+            <div class="status-badge productive">Productive</div>
+        </section>
+
+        <!-- Current Site Tracking -->
+        <section class="tracking-info">
+            <div class="site-label">CURRENTLY TRACKING</div>
+            <div class="site-name" id="currentSite">Not Tracking</div>
+            <div class="site-time" id="elapsedTime">00:00:00</div>
+        </section>
+
+        <!-- Controls -->
+        <div class="controls-grid">
+            <!-- Focus Mode -->
+            <div class="control-card">
+                <div class="control-header">
+                    <span>🚫 Focus Mode</span>
+                    <label class="switch">
+                        <input type="checkbox" id="focusModeToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <small>Blocks distractions</small>
+            </div>
+
+            <!-- Pomodoro -->
+            <div class="control-card">
+                <div class="control-header">
+                    <span>☕ Pomodoro</span>
+                    <button id="pomoBtn" class="pill-btn">START</button>
+                </div>
+                <div id="pomoTimer" class="timer-display">25:00</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <button id="dashboardBtn" class="primary-btn">OPEN DASHBOARD</button>
+        </footer>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

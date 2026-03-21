@@ -1,0 +1,9 @@
+{
+    "name": "aero-productivity-suite",
+    "version": "1.0.0",
+    "description": "Root package for AERO productivity suite",
+    "scripts": {
+        "install:all": "npm install --prefix backend && npm install --prefix dashboard",
+        "dev": "npx -y concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix dashboard\""
+    }
+}
