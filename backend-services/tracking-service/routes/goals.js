@@ -102,20 +102,10 @@ router.get("/progress", async (req, res, next) => {
         const goalsWithProgress = goals.map(goal => {
             let currentSeconds = 0;
 
-            if (goal.type === "daily_productive_hours" || goal.type === "weekly_productive_hours" || goal.type === "productive") {
-                // Sum all productive time
+            if (goal.website) {
+                // Sum time strictly for the specific website
                 currentSeconds = trackingData
-                    .filter(t => t.category === "productive")
-                    .reduce((sum, t) => sum + t.time, 0);
-            } else if (goal.type === "unproductive") {
-                // Sum all unproductive time
-                currentSeconds = trackingData
-                    .filter(t => t.category === "unproductive" || t.category === "distracting")
-                    .reduce((sum, t) => sum + t.time, 0);
-            } else if (goal.website) {
-                // Sum time for specific website
-                currentSeconds = trackingData
-                    .filter(t => t.website.includes(goal.website.toLowerCase()))
+                    .filter(t => t.website && t.website.toLowerCase().includes(goal.website.toLowerCase()))
                     .reduce((sum, t) => sum + t.time, 0);
             }
 

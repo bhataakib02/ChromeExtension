@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { useAuth, API_URL } from "@/context/AuthContext";
 import axios from "axios";
-import { Activity, TrendingUp, Clock, Target, Zap, ArrowUpRight, Search, Bell, X, Plus, Pencil } from "lucide-react";
+import { Activity, TrendingUp, Clock, Target, Zap, ArrowUpRight, Search, Bell, X, Plus, Pencil, Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { io } from "socket.io-client";
@@ -23,6 +23,7 @@ export default function DashboardPage() {
     const [goals, setGoals] = useState([]);
     const [loading, setLoading] = useState(true);
     const [notifications, setNotifications] = useState([]);
+    const [celebratedGoal, setCelebratedGoal] = useState(null);
     const [showNewGoal, setShowNewGoal] = useState(false);
     const [editingGoal, setEditingGoal] = useState(null);
     const [newGoal, setNewGoal] = useState({
@@ -59,16 +60,19 @@ export default function DashboardPage() {
     async function fetchAllData() {
         setLoading(true);
         try {
-            const token = localStorage.getItem("accessToken");
-            const headers = { Authorization: `Bearer ${token}` };
-
             const [statsRes, goalsRes] = await Promise.all([
-                axios.get(`${API_URL}/tracking/stats`, { headers }),
-                axios.get(`${API_URL}/goals`, { headers })
+                axios.get(`${API_URL}/tracking/stats`),
+                axios.get(`${API_URL}/goals/progress`)
             ]);
 
             setStats(statsRes.data);
             setGoals(goalsRes.data);
+
+            const newlyCompleted = goalsRes.data.find(g => (g.currentSeconds || 0) >= g.targetSeconds && !sessionStorage.getItem(`celebrated_${g._id}`));
+            if (newlyCompleted) {
+                setCelebratedGoal(newlyCompleted);
+                sessionStorage.setItem(`celebrated_${newlyCompleted._id}`, "true");
+            }
         } catch (err) {
             console.error("Could not fetch dashboard data");
         } finally {
@@ -79,17 +83,12 @@ export default function DashboardPage() {
     const handleCreateGoal = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem("accessToken");
             let res;
             if (editingGoal) {
-                res = await axios.put(`${API_URL}/goals/${editingGoal._id}`, newGoal, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                res = await axios.put(`${API_URL}/goals/${editingGoal._id}`, newGoal);
                 setGoals(goals.map(g => g._id === res.data._id ? res.data : g));
             } else {
-                res = await axios.post(`${API_URL}/goals/`, newGoal, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                res = await axios.post(`${API_URL}/goals/`, newGoal);
                 setGoals([...goals, res.data]);
             }
             setShowNewGoal(false);
@@ -167,7 +166,7 @@ export default function DashboardPage() {
                 <StatCard
                     icon={<Clock className="text-accent" size={24} />}
                     label="Total Focus Time"
-                    value={`${Math.floor(stats.totalTime / 3600)}h ${Math.floor((stats.totalTime % 3600) / 60)}m`}
+                    value={`${Math.floor(stats.totalTime / 3600)}h ${Math.floor((stats.totalTime % 3600) / 60)}m ${stats.totalTime % 60}s`}
                     trend={`${Math.floor(stats.productiveTime / 60)}m productive`}
                     color="accent"
                 />
@@ -266,8 +265,8 @@ export default function DashboardPage() {
                                     <div key={goal._id} className="group relative">
                                         <GoalProgress
                                             label={goal.label || goal.website}
-                                            current={goal.currentSeconds / 3600}
-                                            total={goal.targetSeconds / 3600}
+                                            currentSeconds={goal.currentSeconds || 0}
+                                            targetSeconds={goal.targetSeconds || 0}
                                         />
                                         <div className="absolute top-0 right-0 flex items-center gap-2">
                                             <button
@@ -280,10 +279,7 @@ export default function DashboardPage() {
                                             <button
                                                 onClick={() => {
                                                     if (window.confirm("Delete this goal?")) {
-                                                        const token = localStorage.getItem("accessToken");
-                                                        axios.delete(`${API_URL}/goals/${goal._id}`, {
-                                                            headers: { Authorization: `Bearer ${token}` }
-                                                        }).then(() => {
+                                                        axios.delete(`${API_URL}/goals/${goal._id}`).then(() => {
                                                             setGoals(goals.filter(g => g._id !== goal._id));
                                                         });
                                                     }
@@ -298,8 +294,8 @@ export default function DashboardPage() {
                                 ))
                             ) : (
                                 <>
-                                    <GoalProgress label="Deep Work" current={0} total={5} />
-                                    <GoalProgress label="Focus Sessions" current={0} total={2} />
+                                    <GoalProgress label="Deep Work" currentSeconds={0} targetSeconds={18000} />
+                                    <GoalProgress label="Focus Sessions" currentSeconds={0} targetSeconds={7200} />
                                 </>
                             )}
                         </div>
@@ -395,8 +391,9 @@ export default function DashboardPage() {
                                         </select>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Website (Optional)</label>
+                                        <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Website (Required)</label>
                                         <input
+                                            required
                                             className="w-full bg-foreground/5 border border-foreground/10 rounded-xl px-4 py-3 outline-none focus:border-primary focus:bg-foreground/[0.08] transition-all font-inter text-sm text-foreground"
                                             placeholder="e.g. github.com"
                                             value={newGoal.website}
@@ -409,6 +406,34 @@ export default function DashboardPage() {
                                     {editingGoal ? "Update Goal Target" : "Create Goal Target"}
                                 </button>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Celebration Modal */}
+            <AnimatePresence>
+                {celebratedGoal && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.8, opacity: 0, y: 20 }}
+                            className="glass-card w-full max-w-sm p-10 text-center relative overflow-hidden border-primary/20 shadow-2xl"
+                        >
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-accent to-secondary" />
+                            <Trophy size={64} className="mx-auto text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]" />
+                            <h2 className="text-3xl font-black font-outfit mb-2 text-foreground">Goal Completed!</h2>
+                            <p className="text-sm text-muted font-inter mb-6">Congratulations! You successfully completed:</p>
+                            <div className="bg-foreground/5 py-3 px-4 rounded-xl mb-8 border border-foreground/10">
+                                <p className="font-bold text-lg text-primary tracking-wide uppercase">{celebratedGoal.label || celebratedGoal.website}</p>
+                            </div>
+                            <button
+                                onClick={() => setCelebratedGoal(null)}
+                                className="w-full bg-primary text-background font-bold py-4 rounded-2xl hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 active:scale-95 text-sm"
+                            >
+                                Awesome!
+                            </button>
                         </motion.div>
                     </div>
                 )}
@@ -436,13 +461,23 @@ function StatCard({ icon, label, value, trend, color }) {
     );
 }
 
-function GoalProgress({ label, current, total }) {
-    const percent = Math.min(100, (current / total) * 100);
+function GoalProgress({ label, currentSeconds, targetSeconds }) {
+    const safeCurrent = currentSeconds || 0;
+    const safeTotal = targetSeconds || 1;
+    const percent = Math.min(100, (safeCurrent / safeTotal) * 100);
+
+    const formatTime = (secs) => {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+    };
+
     return (
         <div className="space-y-2">
             <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-muted uppercase tracking-tight">{label}</span>
-                <span className="font-mono">{current}h / {total}h</span>
+                <span className="font-mono">{formatTime(safeCurrent)} / {formatTime(targetSeconds)}</span>
             </div>
             <div className="h-2 w-full bg-foreground/5 rounded-full overflow-hidden">
                 <motion.div

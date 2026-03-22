@@ -22,6 +22,7 @@ export default function GoalsPage() {
     const { user } = useAuth();
     const [goals, setGoals] = useState([]);
     const [showNewGoal, setShowNewGoal] = useState(false);
+    const [celebratedGoal, setCelebratedGoal] = useState(null);
     const [editingGoal, setEditingGoal] = useState(null);
     const [loading, setLoading] = useState(true);
     const [newGoal, setNewGoal] = useState({
@@ -45,6 +46,12 @@ export default function GoalsPage() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setGoals(res.data);
+
+            const newlyCompleted = res.data.find(g => (g.currentSeconds || 0) >= g.targetSeconds && !sessionStorage.getItem(`celebrated_${g._id}`));
+            if (newlyCompleted) {
+                setCelebratedGoal(newlyCompleted);
+                sessionStorage.setItem(`celebrated_${newlyCompleted._id}`, "true");
+            }
         } catch (err) {
             console.error("❌ Error fetching goals:", err.response?.data || err.message);
         } finally {
@@ -163,16 +170,16 @@ export default function GoalsPage() {
                             <div className="flex items-center gap-2 text-[10px] text-muted font-black uppercase tracking-widest mb-6">
                                 <span className={goal.type === 'productive' ? 'text-primary' : 'text-accent'}>{goal.type}</span>
                                 <span>•</span>
-                                <span>{Math.floor(goal.targetSeconds / 3600)}h {Math.floor((goal.targetSeconds % 3600) / 60)}m Target</span>
+                                <span>{Math.floor(goal.targetSeconds / 3600) > 0 ? `${Math.floor(goal.targetSeconds / 3600)}h ` : ""}{Math.floor((goal.targetSeconds % 3600) / 60)}m Target</span>
                             </div>
 
                             <div className="space-y-3">
                                 <div className="flex justify-between text-xs font-bold">
                                     <span className="text-muted">Progress</span>
-                                    <span>0h / {Math.floor(goal.targetSeconds / 3600)}h</span>
+                                    <span>{goal.progress}%</span>
                                 </div>
                                 <div className="h-2 w-full bg-foreground/5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-primary w-0" />
+                                    <div className="h-full bg-primary" style={{ width: `${Math.min(100, goal.progress || 0)}%` }} />
                                 </div>
                             </div>
                         </div>
@@ -272,8 +279,9 @@ export default function GoalsPage() {
                                         </select>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Website (Optional)</label>
+                                        <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Website (Required)</label>
                                         <input
+                                            required
                                             className="w-full bg-foreground/5 border border-foreground/10 rounded-xl px-4 py-3 outline-none focus:border-primary focus:bg-foreground/[0.08] transition-all font-inter text-sm text-foreground"
                                             placeholder="e.g. github.com"
                                             value={newGoal.website}
@@ -286,6 +294,34 @@ export default function GoalsPage() {
                                     {editingGoal ? "Update Goal Target" : "Create Goal Target"}
                                 </button>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Celebration Modal */}
+            <AnimatePresence>
+                {celebratedGoal && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md">
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.8, opacity: 0, y: 20 }}
+                            className="glass-card w-full max-w-sm p-10 text-center relative overflow-hidden border-primary/20 shadow-2xl"
+                        >
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-accent to-secondary" />
+                            <Trophy size={64} className="mx-auto text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]" />
+                            <h2 className="text-3xl font-black font-outfit mb-2 text-foreground">Goal Completed!</h2>
+                            <p className="text-sm text-muted font-inter mb-6">Congratulations! You successfully completed:</p>
+                            <div className="bg-foreground/5 py-3 px-4 rounded-xl mb-8 border border-foreground/10">
+                                <p className="font-bold text-lg text-primary tracking-wide uppercase">{celebratedGoal.label || celebratedGoal.website}</p>
+                            </div>
+                            <button
+                                onClick={() => setCelebratedGoal(null)}
+                                className="w-full bg-primary text-background font-bold py-4 rounded-2xl hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 active:scale-95 text-sm"
+                            >
+                                Awesome!
+                            </button>
                         </motion.div>
                     </div>
                 )}

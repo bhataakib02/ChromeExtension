@@ -57,7 +57,7 @@ export default function SettingsPage() {
             const headers = { Authorization: `Bearer ${token}` };
 
             // 1. Update Profile (Name/Email)
-            await axios.put(`${API_URL}/auth/profile`, { name, email }, { headers });
+            await axios.put(`${API_URL}/auth/profile`, { name, email });
 
             // 2. Update Preferences (Theme/Notifications/Goals/Pomodoro)
             await axios.put(`${API_URL}/auth/preferences`, {
@@ -66,7 +66,7 @@ export default function SettingsPage() {
                 weeklyGoalHours,
                 deepWorkMinutes,
                 breakMinutes
-            }, { headers });
+            });
 
             await checkUser(); // Refresh user data in context
             alert("Settings saved successfully!");

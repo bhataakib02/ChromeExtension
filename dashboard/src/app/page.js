@@ -19,8 +19,8 @@ export default function LandingPage() {
           <span className="text-xl font-bold tracking-tighter">AERO</span>
         </div>
         <div className="flex gap-4">
-          <Link href="/login" className="px-5 py-2 hover:text-primary transition-all text-sm font-semibold">Login</Link>
-          <Link href="/signup" className="px-5 py-2 bg-white text-background rounded-lg font-bold text-sm hover:scale-105 transition-all">Get Started</Link>
+          <Link href="/dashboard" className="px-5 py-2 hover:text-primary transition-all text-sm font-semibold">Dashboard</Link>
+          <Link href="/dashboard" className="px-5 py-2 bg-white text-background rounded-lg font-bold text-sm hover:scale-105 transition-all">Get Started</Link>
         </div>
       </nav>
 
@@ -45,7 +45,7 @@ export default function LandingPage() {
               Stop guessing. AERO tracks, analyzes, and optimizes your digital life so you can focus on what actually matters.
             </p>
             <div className="flex justify-center gap-4 pt-4">
-              <Link href="/signup" className="btn-primary px-10 py-5 rounded-2xl flex items-center gap-2 group">
+              <Link href="/dashboard" className="btn-primary px-10 py-5 rounded-2xl flex items-center gap-2 group">
                 Start Your Journey <ArrowRight size={20} className="group-hover:translate-x-1 transition-all" />
               </Link>
               <button className="px-10 py-5 bg-foreground/5 border border-foreground/10 rounded-2xl font-bold hover:bg-foreground/10 transition-all">

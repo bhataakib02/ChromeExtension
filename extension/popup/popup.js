@@ -1,260 +1,78 @@
-/**
- * AERO PRODUCTIVITY - POPUP LOGIC
- */
-
-const API_URL = "http://localhost:5010/api";
-
-document.addEventListener("DOMContentLoaded", async () => {
-    // ==================== UI ELEMENTS ====================
-    // Auth Elements
-    const authView = document.getElementById("auth-view");
-    const mainView = document.getElementById("main-view");
-    const tabLogin = document.getElementById("tabLogin");
-    const tabRegister = document.getElementById("tabRegister");
-    const authForm = document.getElementById("authForm");
-    const nameFieldToggle = document.getElementById("nameFieldToggle");
-    const authName = document.getElementById("authName");
-    const authEmail = document.getElementById("authEmail");
-    const authPassword = document.getElementById("authPassword");
-    const authError = document.getElementById("authError");
-    const authSubmitBtn = document.getElementById("authSubmitBtn");
-
-    // Main Elements
-    const scoreVal = document.getElementById("scoreValue");
-    const currentSite = document.getElementById("currentSite");
-    const elapsedTime = document.getElementById("elapsedTime");
-    const focusToggle = document.getElementById("focusModeToggle");
-    const pomoBtn = document.getElementById("pomoBtn");
-    const pomoTimer = document.getElementById("pomoTimer");
-    const scoreMeter = document.querySelector(".meter");
+document.addEventListener("DOMContentLoaded", () => {
+    const siteList = document.getElementById("siteList");
     const dashboardBtn = document.getElementById("dashboardBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const settingsBtn = document.getElementById("settingsBtn");
+    const clearDataBtn = document.getElementById("clearDataBtn");
 
-    // ==================== AUTH ROUTING & LOGIC ====================
-    let isLoginMode = true;
-
-    function checkAuth() {
-        chrome.storage.local.get(["accessToken"], (data) => {
-            if (data.accessToken) {
-                authView.style.display = "none";
-                mainView.style.display = "flex";
-
-                // Immediately display cached UI, but trigger a background sync for fresh preferences
-                updateUI();
-                chrome.runtime.sendMessage({ action: "syncAll" }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        console.warn("Could not sync with background:", chrome.runtime.lastError.message);
-                    } else {
-                        // After fresh data is pulled into local storage, update UI again
-                        updateUI();
-                    }
-                });
-            } else {
-                mainView.style.display = "none";
-                authView.style.display = "flex";
-            }
-        });
+    function formatTime(seconds) {
+        if (seconds < 60) return `${Math.floor(seconds)}s`;
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        if (m < 60) return `${m}m ${s}s`;
+        const h = Math.floor(m / 60);
+        const mRemaining = m % 60;
+        return `${h}h ${mRemaining}m`;
     }
-
-    tabLogin.addEventListener("click", () => {
-        isLoginMode = true;
-        tabLogin.classList.add("active");
-        tabRegister.classList.remove("active");
-        nameFieldToggle.style.display = "none";
-        authSubmitBtn.textContent = "LOGIN";
-        authError.textContent = "";
-    });
-
-    tabRegister.addEventListener("click", () => {
-        isLoginMode = false;
-        tabRegister.classList.add("active");
-        tabLogin.classList.remove("active");
-        nameFieldToggle.style.display = "flex";
-        authSubmitBtn.textContent = "REGISTER";
-        authError.textContent = "";
-    });
-
-    authForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        authError.textContent = "";
-        authSubmitBtn.disabled = true;
-        authSubmitBtn.textContent = "PLEASE WAIT...";
-
-        const endpoint = isLoginMode ? "/auth/login" : "/auth/register";
-        const payload = {
-            email: authEmail.value,
-            password: authPassword.value
-        };
-
-        if (!isLoginMode) {
-            payload.name = authName.value;
-        }
-
-        try {
-            const res = await fetch(`${API_URL}${endpoint}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-
-            let data = {};
-            const contentType = res.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                data = await res.json();
-            } else {
-                const text = await res.text();
-                throw new Error(res.ok ? "Invalid server response" : (text || "Server error"));
-            }
-
-            if (!res.ok) {
-                throw new Error(data.error || "Authentication failed");
-            }
-
-            // Save token and init background sync
-            chrome.storage.local.set({ accessToken: data.accessToken }, () => {
-                chrome.runtime.sendMessage({ action: "syncAll" });
-                checkAuth();
-            });
-        } catch (err) {
-            authError.textContent = err.message;
-        } finally {
-            authSubmitBtn.disabled = false;
-            authSubmitBtn.textContent = isLoginMode ? "LOGIN" : "REGISTER";
-        }
-    });
-
-    logoutBtn.addEventListener("click", () => {
-        chrome.storage.local.remove(["accessToken"], () => {
-            checkAuth();
-        });
-    });
-
-    settingsBtn.addEventListener("click", () => {
-        chrome.tabs.create({ url: "http://localhost:3000/settings" });
-    });
-
-    // Check auth on load
-    checkAuth();
-
-    // ==================== MAIN DASHBOARD LOGIC ====================
 
     function updateUI() {
-        chrome.storage.local.get(
-            ["activeTab", "startTime", "productivityScore", "focusModeEnabled", "deepWorkActive", "deepWorkEndTime", "preferences"],
-            (data) => {
-                // Update Current Site
-                if (data.activeTab) {
-                    currentSite.textContent = data.activeTab;
-                    updateElapsedTime(data.startTime);
-                } else {
-                    currentSite.textContent = "Not Tracking";
-                    elapsedTime.textContent = "00:00:00";
-                }
+        chrome.storage.local.get(["siteTimes", "activeTab", "startTime", "lastSaveTime"], (data) => {
+            let times = data.siteTimes || {};
 
-                // Update Score
-                const score = data.productivityScore || 0;
-                scoreVal.textContent = score;
-                const offset = 283 - (283 * score) / 100;
-                scoreMeter.style.strokeDashoffset = offset;
-
-                // Update Focus Mode
-                if (focusToggle) {
-                    focusToggle.checked = !!data.focusModeEnabled;
-                }
-
-                // Update Deep Work
-                if (data.deepWorkActive) {
-                    pomoBtn.textContent = "STOP";
-                    pomoBtn.classList.add("danger");
-                    startPomoUIUpdate(data.deepWorkEndTime);
-                } else {
-                    pomoBtn.textContent = "START";
-                    pomoBtn.classList.remove("danger");
-
-                    const prefs = data.preferences || {};
-                    const deepWorkMins = prefs.deepWorkMinutes || 25;
-                    pomoTimer.textContent = `${deepWorkMins}:00`;
-                }
+            // Preview the running time for the current active tab
+            if (data.activeTab && data.startTime) {
+                const start = data.lastSaveTime || data.startTime;
+                const elapsed = (Date.now() - start) / 1000;
+                times[data.activeTab] = (times[data.activeTab] || 0) + elapsed;
             }
-        );
-    }
 
-    function updateElapsedTime(startTime) {
-        if (!startTime) return;
-        const seconds = Math.floor((Date.now() - startTime) / 1000);
-        const h = Math.floor(seconds / 3600).toString().padStart(2, "0");
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
-        const s = (seconds % 60).toString().padStart(2, "0");
-        elapsedTime.textContent = `${h}:${m}:${s}`;
-    }
+            siteList.innerHTML = "";
+            const sortedSites = Object.entries(times).sort((a, b) => b[1] - a[1]);
 
-    // ==================== EVENT LISTENERS ====================
+            if (sortedSites.length === 0) {
+                const li = document.createElement("li");
+                li.style.padding = "16px";
+                li.style.textAlign = "center";
+                li.style.color = "var(--text-dim)";
+                li.textContent = "No data yet.";
+                siteList.appendChild(li);
+                return;
+            }
 
-    if (focusToggle) {
-        focusToggle.addEventListener("change", (e) => {
-            const enabled = e.target.checked;
-            chrome.storage.local.set({ focusModeEnabled: enabled }, () => {
-                chrome.runtime.sendMessage({ action: "syncAll" }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        console.warn("Could not sync with background:", chrome.runtime.lastError.message);
-                    }
-                });
+            sortedSites.forEach(([domain, seconds]) => {
+                if (seconds < 1) return;
+                const li = document.createElement("li");
+                li.className = "site-item";
+
+                const img = document.createElement("img");
+                img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+                img.alt = domain;
+
+                const spanDomain = document.createElement("span");
+                spanDomain.className = "site-domain";
+                spanDomain.textContent = domain;
+
+                const spanTime = document.createElement("span");
+                spanTime.className = "site-time";
+                spanTime.textContent = formatTime(seconds);
+
+                li.appendChild(img);
+                li.appendChild(spanDomain);
+                li.appendChild(spanTime);
+                siteList.appendChild(li);
             });
         });
     }
 
-    pomoBtn.addEventListener("click", () => {
-        chrome.storage.local.get(["deepWorkActive", "preferences"], (data) => {
-            if (data.deepWorkActive) {
-                // Stop Deep Work
-                chrome.alarms.clear("deepWork");
-                chrome.storage.local.set({ deepWorkActive: false });
-                updateUI();
-            } else {
-                // Start Deep Work
-                const prefs = data.preferences || {};
-                const minutes = prefs.deepWorkMinutes || 25;
-                chrome.runtime.sendMessage({ action: "startDeepWork", minutes: minutes }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        console.error("Deep Work error:", chrome.runtime.lastError.message);
-                    } else if (response && response.success) {
-                        updateUI();
-                    }
-                });
-            }
-        });
-    });
+    updateUI();
+    setInterval(updateUI, 1000);
 
     dashboardBtn.addEventListener("click", () => {
         chrome.tabs.create({ url: "http://localhost:3000" });
     });
 
-    // ==================== REAL-TIME UPDATES ====================
-
-    setInterval(() => {
-        // Only run real-time updates if main view is visible
-        if (mainView.style.display !== "none") {
-            chrome.storage.local.get(["startTime", "activeTab"], (data) => {
-                if (data.activeTab && data.startTime) {
-                    updateElapsedTime(data.startTime);
-                }
-            });
-        }
-    }, 1000);
-
-    let pomoInterval;
-    function startPomoUIUpdate(endTime) {
-        if (pomoInterval) clearInterval(pomoInterval);
-        pomoInterval = setInterval(() => {
-            const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-            const m = Math.floor(remaining / 60).toString().padStart(2, "0");
-            const s = (remaining % 60).toString().padStart(2, "0");
-            pomoTimer.textContent = `${m}:${s}`;
-            if (remaining <= 0) {
-                clearInterval(pomoInterval);
-                updateUI();
-            }
-        }, 1000);
-    }
+    clearDataBtn.addEventListener("click", () => {
+        chrome.storage.local.set({ siteTimes: {} }, () => {
+            chrome.runtime.sendMessage({ action: "resetTracking" });
+            updateUI();
+        });
+    });
 });

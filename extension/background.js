@@ -2,8 +2,7 @@
  * =====================================================
  * PRODUCTIVITY PLATFORM - BACKGROUND SERVICE WORKER (V3)
  * =====================================================
- * Handles time tracking, Deep Work, Focus Mode,
- * and authenticated API communication.
+ * Handles standalone local time tracking and auth-less syncing.
  * =====================================================
  */
 
@@ -12,10 +11,6 @@ let activeTab = null;
 let activeTitle = "";
 let startTime = null;
 let lastSaveTime = null;
-let blocklist = [];
-let tabSwitches = 0; // Track tab switching frequency
-let idleTimeMins = 0; // Track idle time
-let isIdle = false;
 
 // Initialization guard
 let initialized = false;
@@ -29,43 +24,11 @@ async function heartbeat() {
         const start = lastSaveTime || startTime;
         const elapsed = (now - start) / 1000;
 
-        if (elapsed >= 30) { // Save every 30+ seconds
+        if (elapsed >= 5) { // Save every 5 seconds
             await saveSession(activeTab, Math.floor(elapsed), activeTitle);
             lastSaveTime = now;
             chrome.storage.local.set({ lastSaveTime });
         }
-    }
-}
-
-// ==================== AUTH HELPERS ====================
-
-async function getAuthToken() {
-    const data = await chrome.storage.local.get(["accessToken"]);
-    return data.accessToken;
-}
-
-async function authenticatedFetch(endpoint, options = {}) {
-    try {
-        const token = await getAuthToken();
-        const headers = {
-            "Content-Type": "application/json",
-            "X-Auth-Token": token || "",
-            "Authorization": token ? `Bearer ${token}` : "",
-            ...options.headers,
-        };
-
-        const fullUrl = `${API_URL}${endpoint}`;
-        console.log(`🌐 Fetching: ${fullUrl}`);
-        const response = await fetch(fullUrl, { ...options, headers });
-
-        if (response.status === 401) {
-            console.warn("Unauthorized API call. Token might be expired.");
-        }
-
-        return response;
-    } catch (err) {
-        console.error(`Fetch error at ${endpoint}:`, err);
-        throw err;
     }
 }
 
@@ -82,38 +45,34 @@ function isTrackable(url) {
 }
 
 async function saveSession(website, timeSeconds, pageTitle = "") {
-    console.log(`🔍 Attempting to save session: ${website} (${timeSeconds}s)`);
-    if (!website || timeSeconds < 2) {
-        console.log("⚠️ Session too short or website missing, skipping.");
-        return;
+    if (!website || timeSeconds <= 0) return;
+
+    // 1. Save to local storage for the extension's popup
+    try {
+        const data = await chrome.storage.local.get(["siteTimes"]);
+        const siteTimes = data.siteTimes || {};
+        siteTimes[website] = (siteTimes[website] || 0) + timeSeconds;
+        await chrome.storage.local.set({ siteTimes });
+    } catch (err) {
+        console.error("❌ Local Tracking error:", err);
     }
 
+    // 2. Sync to backend (now completely auth-less, will bind to default user)
     try {
-        const res = await authenticatedFetch("/tracking", {
+        await fetch(`${API_URL}/tracking`, {
             method: "POST",
-            body: JSON.stringify({ website, time: timeSeconds, pageTitle }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ website, time: timeSeconds, pageTitle })
         });
-
-        if (res.ok) {
-            console.log(`✅ Tracked successfully: ${website} (${timeSeconds}s)`);
-        } else {
-            console.error(`❌ Tracking failed with status: ${res.status}`);
-            // Save locally if offline or error
-            const { offlineData } = await chrome.storage.local.get(["offlineData"]);
-            const offline = offlineData || [];
-            offline.push({ website, time: timeSeconds, pageTitle, date: Date.now() });
-            await chrome.storage.local.set({ offlineData: offline });
-            console.log("💾 Saved session to offline storage.");
-        }
     } catch (err) {
-        console.error("❌ Tracking API error:", err);
+        // Silent fail on backend sync if port 5010 isn't running
     }
 }
 
 async function handleTabSwitch(url, title = "") {
     await initPromise; // Ensure we have loaded state
 
-    // If it's the same hostname and title, skip redundant calls (within 1s)
+    // If it's the same hostname and title, skip redundant calls
     if (activeTab && url.includes(activeTab) && title === activeTitle) {
         return;
     }
@@ -139,139 +98,15 @@ async function handleTabSwitch(url, title = "") {
     activeTab = new URL(url).hostname;
     activeTitle = title || "";
     startTime = Date.now();
-    tabSwitches++;
-
-    // Check cognitive load periodically
-    if (tabSwitches % 5 === 0) {
-        authenticatedFetch("/ai/cognitive-load", {
-            method: "POST",
-            body: JSON.stringify({
-                tab_switches_per_min: tabSwitches / 5, // rough estimate
-                idle_time_percentage: idleTimeMins / 60,
-                session_length_mins: (Date.now() - (lastSaveTime || startTime)) / 60000
-            })
-        }).then(res => {
-            if (res.ok) return res.json();
-            throw new Error(`AI Service returned ${res.status}`);
-        }).then(data => {
-            if (data && data.burnout_risk === "High") {
-                chrome.notifications.create("burnout-warning", {
-                    type: "basic",
-                    iconUrl: "icons/icon128.png",
-                    title: "🧠 High Cognitive Load",
-                    message: data.recommendation,
-                    priority: 2,
-                });
-            }
-        }).catch(e => {
-            if (e.message.includes("504") || e.message.includes("502")) {
-                console.warn("Cognitive check skipped: AI Service unavailable.");
-            } else {
-                console.warn("Cognitive check failed:", e);
-            }
-        });
-    }
 
     // Persist state for recovery
-    chrome.storage.local.set({ activeTab, activeTitle, startTime, tabSwitches });
-
-    // Check Focus Mode
-    checkFocusMode(activeTab);
-}
-
-// ==================== IDLE DETECTION ====================
-chrome.idle.setDetectionInterval(60);
-chrome.idle.onStateChanged.addListener((newState) => {
-    console.log(`Idle state changed to: ${newState}`);
-    if (newState === 'idle' || newState === 'locked') {
-        isIdle = true;
-        idleTimeMins += 1;
-    } else {
-        isIdle = false;
-    }
-});
-
-// ==================== FOCUS MODE ====================
-
-async function checkFocusMode(hostname) {
-    const { focusModeEnabled } = await chrome.storage.local.get(["focusModeEnabled"]);
-    if (!focusModeEnabled) return;
-
-    const { blocklist: storedBlocklist } = await chrome.storage.local.get(["blocklist"]);
-    const isBlocked = storedBlocklist && storedBlocklist.some(site => hostname.includes(site));
-
-    if (isBlocked) {
-        chrome.notifications.create("focus-block", {
-            type: "basic",
-            iconUrl: "icons/icon128.png",
-            title: "🚫 Focus Mode Active",
-            message: `${hostname} is on your blocklist. Stay focused!`,
-            priority: 2,
-        });
-    }
-}
-
-async function syncBlocklist() {
-    try {
-        const res = await authenticatedFetch("/focus");
-        if (res.ok) {
-            const list = await res.json();
-            const blacklist = list.map(b => b.website);
-            await chrome.storage.local.set({ blocklist: blacklist });
-            console.log("✅ Blocklist synced:", blacklist.length, "sites");
-        }
-    } catch (err) {
-        console.warn("Could not sync blocklist");
-    }
-}
-
-async function syncPreferences() {
-    try {
-        const res = await authenticatedFetch("/auth/me");
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.user && data.user.preferences) {
-                await chrome.storage.local.set({ preferences: data.user.preferences });
-                console.log("✅ Preferences synced:", data.user.preferences);
-            }
-        }
-    } catch (err) {
-        console.warn("Could not sync preferences");
-    }
+    chrome.storage.local.set({ activeTab, activeTitle, startTime });
 }
 
 // ==================== ALARMS & EVENTS ====================
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name === "deepWork") {
-        const { deepWorkState, deepWorkSessionId } = await chrome.storage.local.get(["deepWorkState", "deepWorkSessionId"]);
-        const isWork = deepWorkState === "work";
-
-        // Update backend
-        if (deepWorkSessionId) {
-            authenticatedFetch(`/deepwork/end/${deepWorkSessionId}`, {
-                method: "PUT",
-                body: JSON.stringify({ completed: true, actualMinutes: isWork ? 25 : 5 }) // Simplification
-            });
-        }
-
-        chrome.notifications.create("deepwork-finished", {
-            type: "basic",
-            iconUrl: "icons/icon128.png",
-            title: isWork ? "🎉 Deep Work Session Finished" : "☕ Break Finished",
-            message: isWork ? "Time for a short break!" : "Back to work!",
-            requireInteraction: true,
-        });
-
-        await chrome.storage.local.set({
-            deepWorkState: isWork ? "break" : "idle",
-            deepWorkActive: false,
-            deepWorkSessionId: null
-        });
-    } else if (alarm.name === "sync-blocklist") {
-        syncBlocklist();
-        syncPreferences();
-    } else if (alarm.name === "heartbeat") {
+    if (alarm.name === "heartbeat") {
         heartbeat();
     }
 });
@@ -303,83 +138,17 @@ chrome.windows.onRemoved.addListener(async () => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "pageLoaded") {
-        // Classify the page content asynchronously
-        authenticatedFetch("/ai/classify", {
-            method: "POST",
-            body: JSON.stringify({ url: request.url, title: request.title, content: request.content || "" })
-        }).then(res => {
-            if (res.ok) return res.json();
-            throw new Error(`AI classify returned ${res.status}`);
-        }).then(data => {
-            console.log("🧠 AI Classification:", data);
-        }).catch(err => {
-            if (err.message.includes("504") || err.message.includes("502")) {
-                console.warn("AI classify skipped: AI Service unavailable.");
-            } else {
-                console.warn("AI classify failed:", err);
-            }
-        });
-    } else if (request.action === "engagementActivity") {
-        console.log(`Engagement on ${request.url} -> Scrolls: ${request.scrolls}, Clicks: ${request.clicks}`);
-    } else if (request.action === "syncAll") {
-        Promise.all([syncBlocklist(), syncPreferences()])
-            .then(() => sendResponse({ success: true }))
-            .catch(err => {
-                console.error("syncAll failed", err);
-                sendResponse({ success: false, error: err.message });
-            });
-        return true;
-    } else if (request.action === "startDeepWork") {
-        chrome.storage.local.get(["preferences"], (data) => {
-            const prefs = data.preferences || {};
-            const minutes = request.minutes || prefs.deepWorkMinutes || 25;
-            chrome.alarms.create("deepWork", { delayInMinutes: minutes });
-
-            // Start session in backend
-            authenticatedFetch("/deepwork/start", {
-                method: "POST",
-                body: JSON.stringify({
-                    type: "work",
-                    durationMinutes: minutes,
-                    website: activeTab || ""
-                })
-            }).then(async res => {
-                if (res.ok) {
-                    const session = await res.json();
-                    chrome.storage.local.set({
-                        deepWorkActive: true,
-                        deepWorkState: "work",
-                        deepWorkEndTime: Date.now() + minutes * 60000,
-                        deepWorkSessionId: session._id
-                    });
-                    console.log("✅ Deep Work session started in backend:", session._id);
-                } else {
-                    console.warn(`⚠️ Backend failed to start deep work: ${res.status}`);
-                }
-            }).catch(err => console.error("Could not start deep work in backend:", err));
-        });
-
+    if (request.action === "resetTracking") {
+        startTime = Date.now();
+        lastSaveTime = null;
+        chrome.storage.local.set({ startTime, lastSaveTime: null });
         sendResponse({ success: true });
-        return false;
-    }
-});
-
-chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
-    if (request.action === "setToken" && request.token) {
-        chrome.storage.local.set({ accessToken: request.token }, () => {
-            console.log("✅ Auth token received from dashboard");
-            syncBlocklist();
-            sendResponse({ success: true });
-        });
-        return true;
     }
 });
 
 // ==================== INIT ====================
 
 async function init() {
-    console.log("🚀 Initialization starting...");
     const storage = await chrome.storage.local.get(["activeTab", "activeTitle", "startTime", "lastSaveTime"]);
 
     if (storage.activeTab && storage.startTime) {
@@ -387,16 +156,9 @@ async function init() {
         activeTitle = storage.activeTitle || "";
         startTime = storage.startTime;
         lastSaveTime = storage.lastSaveTime || null;
-        console.log(`📡 Resumed tracking: ${activeTab}`);
     }
 
-    syncBlocklist();
-    syncPreferences();
-
-    // Use Alarms for periodic sync (more reliable in V3)
-    chrome.alarms.create("sync-blocklist", { periodInMinutes: 10 });
-    chrome.alarms.create("heartbeat", { periodInMinutes: 1 });
-
+    // Use Alarms for periodic save
+    chrome.alarms.create("heartbeat", { periodInMinutes: 0.1 }); // Every 6 seconds approx
     initialized = true;
-    console.log("✅ Initialization complete");
 }

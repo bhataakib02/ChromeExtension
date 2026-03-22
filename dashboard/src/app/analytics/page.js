@@ -34,6 +34,7 @@ export default function AnalyticsPage() {
     const [distribution, setDistribution] = useState([]);
     const [hourly, setHourly] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [categoryFilter, setCategoryFilter] = useState("all");
 
     useEffect(() => {
         if (user) {
@@ -44,13 +45,10 @@ export default function AnalyticsPage() {
     async function fetchData() {
         setLoading(true);
         try {
-            const token = localStorage.getItem("accessToken");
-            const headers = { Authorization: `Bearer ${token}` };
-
             const [sitesRes, distRes, hourlyRes] = await Promise.all([
-                axios.get(`${API_URL}/tracking?range=${range}`, { headers }),
-                axios.get(`${API_URL}/tracking/score?range=${range}`, { headers }),
-                axios.get(`${API_URL}/tracking/hourly?range=${range}`, { headers })
+                axios.get(`${API_URL}/tracking?range=${range}`),
+                axios.get(`${API_URL}/tracking/score?range=${range}`),
+                axios.get(`${API_URL}/tracking/hourly?range=${range}`)
             ]);
 
             setSites(sitesRes.data);
@@ -196,11 +194,25 @@ export default function AnalyticsPage() {
 
             {/* Top Sites Table */}
             <div className="glass-card overflow-hidden">
-                <div className="p-8 border-b border-foreground/5 flex justify-between items-center bg-foreground/[0.01]">
+                <div className="p-8 border-b border-foreground/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-foreground/[0.01]">
                     <h2 className="text-xl font-bold font-outfit flex items-center gap-3 uppercase tracking-wider text-sm">
                         <TrendingUp size={24} className="text-primary" />
                         Most Visited Platforms
                     </h2>
+                    <div className="flex items-center gap-2 bg-foreground/5 p-1 rounded-xl">
+                        {["all", "productive", "neutral", "unproductive"].map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setCategoryFilter(cat)}
+                                className={`px-4 py-1.5 flex items-center gap-2 text-xs font-bold rounded-lg transition-all capitalize ${categoryFilter === cat ? "bg-background text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}
+                            >
+                                {cat !== "all" && (
+                                    <div className={`w-2 h-2 rounded-full ${cat === "productive" ? "bg-green-500" : cat === "unproductive" ? "bg-red-500" : "bg-slate-400"}`} />
+                                )}
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 {loading ? (
                     <div className="p-20 text-center text-muted italic font-inter">Loading your activity...</div>
@@ -218,40 +230,43 @@ export default function AnalyticsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5 font-inter">
-                                {sites.slice(0, 10).map((site) => (
-                                    <tr key={site._id} className="hover:bg-foreground/[0.02] transition-all group">
-                                        <td className="px-8 py-5">
-                                            <a
-                                                href={`https://${site._id}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex items-center gap-2 w-fit group"
-                                            >
-                                                <span className="font-bold group-hover:text-primary transition-colors">{site._id}</span>
-                                                <ExternalLink size={14} className="text-muted/0 group-hover:text-muted/50 transition-all" />
-                                            </a>
-                                        </td>
-                                        <td className="px-8 py-5">
-                                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${site.category === 'productive' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : site.category === 'unproductive' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'}`}>
-                                                {site.category}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-5 font-mono text-sm">
-                                            {Math.floor(site.totalTime / 3600)}h {Math.floor((site.totalTime % 3600) / 60)}m
-                                        </td>
-                                        <td className="px-8 py-5">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-1.5 bg-foreground/10 rounded-full flex-1 max-w-[80px] overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-primary"
-                                                        style={{ width: `${Math.min(100, (site.totalTime / sites[0].totalTime) * 100)}%` }}
-                                                    />
+                                {sites
+                                    .filter(site => categoryFilter === "all" || site.category === categoryFilter)
+                                    .slice(0, 15)
+                                    .map((site) => (
+                                        <tr key={site._id} className="hover:bg-foreground/[0.02] transition-all group">
+                                            <td className="px-8 py-5">
+                                                <a
+                                                    href={`https://${site._id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-2 w-fit group"
+                                                >
+                                                    <span className="font-bold group-hover:text-primary transition-colors">{site._id}</span>
+                                                    <ExternalLink size={14} className="text-muted/0 group-hover:text-muted/50 transition-all" />
+                                                </a>
+                                            </td>
+                                            <td className="px-8 py-5">
+                                                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${site.category === 'productive' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : site.category === 'unproductive' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'}`}>
+                                                    {site.category}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-5 font-mono text-sm whitespace-nowrap">
+                                                {Math.floor(site.totalTime / 3600)}h {Math.floor((site.totalTime % 3600) / 60)}m {site.totalTime % 60}s
+                                            </td>
+                                            <td className="px-8 py-5">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-1.5 bg-foreground/10 rounded-full flex-1 max-w-[80px] overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-primary"
+                                                            style={{ width: `${Math.min(100, (site.totalTime / sites[0].totalTime) * 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs text-muted font-bold" title="Frequency: Number of times you visited or returned to this website.">{site.sessions} <span className="text-[8px] opacity-50">SESSIONS</span></span>
                                                 </div>
-                                                <span className="text-xs text-muted font-bold">{site.sessions} <span className="text-[8px] opacity-50">SESSIONS</span></span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                        </tr>
+                                    ))}
                             </tbody>
                         </table>
                     </div>

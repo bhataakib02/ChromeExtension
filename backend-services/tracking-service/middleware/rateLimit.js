@@ -8,7 +8,7 @@ const rateLimit = require("express-rate-limit");
 // Global rate limit — all routes
 const globalRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // 200 requests per 15 min per IP
+    max: 20000, // Increased for extension syncs
     standardHeaders: true,
     legacyHeaders: false,
     message: {

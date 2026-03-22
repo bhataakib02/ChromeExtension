@@ -12,24 +12,12 @@ export default function ExtensionSetupPage() {
     const handleManualSync = () => {
         setSyncing(true);
         setSyncStatus(null);
-
-        const token = localStorage.getItem("accessToken");
-        const extensionId = "dfbcfgkpgbfbdjabippomkelpkboffen";
-
-        if (typeof window !== "undefined" && window.chrome && window.chrome.runtime) {
-            window.chrome.runtime.sendMessage(extensionId, { action: "setToken", token }, (response) => {
-                setSyncing(false);
-                if (window.chrome.runtime.lastError) {
-                    setSyncStatus("error");
-                    console.error("Sync Error:", window.chrome.runtime.lastError.message);
-                } else {
-                    setSyncStatus("success");
-                }
-            });
-        } else {
+        // Auth is globally bypassed, so no token needs to be synced to the extension anymore.
+        // We just simulate a quick success state.
+        setTimeout(() => {
             setSyncing(false);
-            setSyncStatus("error");
-        }
+            setSyncStatus("success");
+        }, 1200);
     };
 
     const steps = [
